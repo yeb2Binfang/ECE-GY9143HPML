@@ -322,3 +322,10 @@ for i in range(0, 1956, 391):
     print(np.mean(train_loss_history[i:i+391]))
 print(total_train_time_epoch)
 '''
+
+# Q3
+from torchsummary import summary
+summary(net, (3,32,32))
+
+num_params = sum(param.numel() for param in net.parameters() if param.requires_grad)
+print(num_params)
