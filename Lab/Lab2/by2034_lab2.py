@@ -216,13 +216,16 @@ print(total_train_time_epoch)
 
 def num_worker_time(num_worker_data_loading_time):
   data_loading_time_total = 0
-  for batch_idx, (inputs, targets) in enumerate(train_loader):
-    data_loading_time_start = time.time()
-    inputs, targets = inputs.to(device), targets.to(device)
-    data_loading_time_end = time.time()
-    data_loading_time_total += (data_loading_time_end - data_loading_time_start)
-
-  num_worker_data_loading_time.append(data_loading_time_total)
+  data_loading_time_start = time.time()
+  temp = 0
+  for batch_idx, (inputs, targets) in enumerate(train_loader):  
+    in_temp_start = time.time()
+    inputs, targets = inputs.to(device), targets.to(device)   
+    in_temp_end = time.time()
+    temp += (in_temp_end - in_temp_start)
+  data_loading_time_end = time.time()  
+  whole_time = data_loading_time_end - data_loading_time_start
+  num_worker_data_loading_time.append(whole_time - temp)
 
 num_workers = [0,1,2,4,8,12,16]
 batch_size = 128
