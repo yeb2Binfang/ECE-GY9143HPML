@@ -1,96 +1,135 @@
-# import the necessary packages
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import AveragePooling2D
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import concatenate
-from tensorflow.keras import backend as K
+# Import necessary packages
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
 
-class MiniGoogLeNet:
-	@staticmethod
-	def conv_module(x, K, kX, kY, stride, chanDim, padding="same"):
-		# define a CONV => BN => RELU pattern
-		x = Conv2D(K, (kX, kY), strides=stride, padding=padding)(x)
-		x = BatchNormalization(axis=chanDim)(x)
-		x = Activation("relu")(x)
 
-		# return the block
-		return x
+class MiniGoogLeNet(nn.Module):
+    """
+    A small and light weight model inspired by Inception architecture
+    """
 
-	@staticmethod
-	def inception_module(x, numK1x1, numK3x3, chanDim):
-		# define two CONV modules, then concatenate across the
-		# channel dimension
-		conv_1x1 = MiniGoogLeNet.conv_module(x, numK1x1, 1, 1,
-			(1, 1), chanDim)
-		conv_3x3 = MiniGoogLeNet.conv_module(x, numK3x3, 3, 3,
-			(1, 1), chanDim)
-		x = concatenate([conv_1x1, conv_3x3], axis=chanDim)
+    def __init__(self, n_class, size, depth):
+        super().__init__()
+        self.n_class = n_class
+        self.size = size
+        self.depth = depth
+        self.conv0 = BasicConv2d(
+            in_channels=depth, out_channels=96, kernel_size=3, stride=1, padding=1
+        )
 
-		# return the block
-		return x
+        # Inceptionx2 => Downsample
+        self.inception1a = InceptionModule(in_channels=96, opK1x1=32, opK3x3=32)
+        self.inception1b = InceptionModule(in_channels=64, opK1x1=32, opK3x3=48)
+        self.downsample1a = DownsampleModule(in_channels=80, k=80)
 
-	@staticmethod
-	def downsample_module(x, K, chanDim):
-		# define the CONV module and POOL, then concatenate
-		# across the channel dimensions
-		conv_3x3 = MiniGoogLeNet.conv_module(x, K, 3, 3, (2, 2),
-			chanDim, padding="valid")
-		pool = MaxPooling2D((3, 3), strides=(2, 2))(x)
-		x = concatenate([conv_3x3, pool], axis=chanDim)
+        # Inceptionx4 => Downsample
+        self.inception2a = InceptionModule(in_channels=160, opK1x1=112, opK3x3=48)
+        self.inception2b = InceptionModule(in_channels=160, opK1x1=96, opK3x3=64)
+        self.inception2c = InceptionModule(in_channels=160, opK1x1=80, opK3x3=80)
+        self.inception2d = InceptionModule(in_channels=160, opK1x1=48, opK3x3=96)
+        self.downsample2a = DownsampleModule(in_channels=144, k=96)
 
-		# return the block
-		return x
+        # Inceptionx2 => Average Pool
+        self.inception3a = InceptionModule(in_channels=240, opK1x1=176, opK3x3=160)
+        self.inception3b = InceptionModule(in_channels=336, opK1x1=176, opK3x3=160)
 
-	@staticmethod
-	def build(width, height, depth, classes):
-		# initialize the input shape to be "channels last" and the
-		# channels dimension itself
-		inputShape = (height, width, depth)
-		chanDim = -1
+        # Final FC layer
+        self.fc4a = nn.Linear(in_features=336, out_features=n_class)
 
-		# if we are using "channels first", update the input shape
-		# and channels dimension
-		if K.image_data_format() == "channels_first":
-			inputShape = (depth, height, width)
-			chanDim = 1
+    def forward(self, x):
+        # If x is 3 x 28 x 28
+        x = self.conv0(x)  # 96 x 28 x 28
 
-		# define the model input and first CONV module
-		inputs = Input(shape=inputShape)
-		x = MiniGoogLeNet.conv_module(inputs, 96, 3, 3, (1, 1),
-			chanDim)
+        # Inceptionx2 => Downsample
+        x = self.inception1a(x)  # 64 x 28 x 28
+        x = self.inception1b(x)  # 80 x 28 x 28
+        x = self.downsample1a(x)  # 160 x 13 x 13
 
-		# two Inception modules followed by a downsample module
-		x = MiniGoogLeNet.inception_module(x, 32, 32, chanDim)
-		x = MiniGoogLeNet.inception_module(x, 32, 48, chanDim)
-		x = MiniGoogLeNet.downsample_module(x, 80, chanDim)
+        # Inceptionx4 => Downsample
+        x = self.inception2a(x)  # 160 x 13 x 13
+        x = self.inception2b(x)  # 160 x 13 x 13
+        x = self.inception2c(x)  # 160 x 13 x 13
+        x = self.inception2d(x)  # 144 x 13 x 13
+        x = self.downsample2a(x)  # 240 x 6 x 6
 
-		# four Inception modules followed by a downsample module
-		x = MiniGoogLeNet.inception_module(x, 112, 48, chanDim)
-		x = MiniGoogLeNet.inception_module(x, 96, 64, chanDim)
-		x = MiniGoogLeNet.inception_module(x, 80, 80, chanDim)
-		x = MiniGoogLeNet.inception_module(x, 48, 96, chanDim)
-		x = MiniGoogLeNet.downsample_module(x, 96, chanDim)
+        # Inceptionx2 => Average Pool 
+        x = self.inception3a(x)  # 336 x 6 x 6
+        x = self.inception3b(x)  # 336 x 6 x 6
+        x = F.avg_pool2d(x, kernel_size=6)  # 366 x 1 x 1
 
-		# two Inception modules followed by global POOL and dropout
-		x = MiniGoogLeNet.inception_module(x, 176, 160, chanDim)
-		x = MiniGoogLeNet.inception_module(x, 176, 160, chanDim)
-		x = AveragePooling2D((7, 7))(x)
-		x = Dropout(0.5)(x)
+        # Dropout => Flatten => Dense(Fully-Connected)
+        x = F.dropout(x, p=0.5)  # 366 x 1 x 1
+        x = x.view(x.size(0), -1)  # 366
+        x = self.fc4a(x) # 10
 
-		# softmax classifier
-		x = Flatten()(x)
-		x = Dense(classes)(x)
-		x = Activation("softmax")(x)
+        return x
 
-		# create the model
-		model = Model(inputs, x, name="googlenet")
 
-		# return the constructed network architecture
-		return model
+class InceptionModule(nn.Module):
+    """
+    Class to apply inception by merging a conv1x1 and conv3x3
+    """
+
+    def __init__(self, in_channels, opK1x1, opK3x3):
+        super(InceptionModule, self).__init__()
+
+        ## Defining 1x1 & 3x3 convolution
+        self.conv0 = BasicConv2d(in_channels, opK1x1, kernel_size=1)
+        self.conv1 = BasicConv2d(in_channels, opK3x3, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        # Applying 1x1 & 3x3 convolution
+        conv_1x1 = self.conv0(x)
+        conv_3x3 = self.conv1(x)
+
+        # Concatenating output
+        outputs = [conv_1x1, conv_3x3]
+
+        return torch.cat(outputs, 1)
+
+
+class DownsampleModule(nn.Module):
+    """
+    Class to apply downsampling by merging a conv and max pooling layer
+    """
+
+    def __init__(self, in_channels, k):
+        super(DownsampleModule, self).__init__()
+
+        # Defining convolution layer
+        self.conv0 = BasicConv2d(in_channels, k, kernel_size=3, stride=2)
+
+    def forward(self, x):
+
+        # Convolution layer
+        conv_3x3 = self.conv0(x)
+
+        # Pooling layer
+        pool = F.max_pool2d(x, kernel_size=3, stride=2)
+
+        # Concatenation
+        outputs = [conv_3x3, pool]
+
+        return torch.cat(outputs, 1)
+
+
+class BasicConv2d(nn.Module):
+    """
+    Class to apply basic Conv => BN => RELU sequence
+    """
+
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(BasicConv2d, self).__init__()
+
+        # Define a CONV => BN => RELU
+        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+
+    def forward(self, x):
+        # Applying a CONV => BN => RELU
+        x = self.conv(x)
+        x = self.bn(x)
+        return F.relu(x, inplace=True)
+
