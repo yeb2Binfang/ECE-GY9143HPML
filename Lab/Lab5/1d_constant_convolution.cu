@@ -4,7 +4,7 @@
 
 #define MASK_LENGTH 7
 
-__constant__ int mask[MASK_LENGTH]
+__constant__ int mask[MASK_LENGTH];
 
 __global__ void convolution_1d(int *array, int *result, int n){
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -52,6 +52,11 @@ int main(){
 
 	for(int i = 0; i < n; i++){
 		h_array[i] = rand()  % 100;
+	}
+
+	int *h_mask = new int[MASK_LENGTH];
+	for(int i = 0; i < MASK_LENGTH; i++){
+		h_mask[i] = rand() % 10;
 	}
 
 	int *h_result = new int[n];
