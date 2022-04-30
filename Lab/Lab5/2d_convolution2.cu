@@ -12,15 +12,15 @@
 //	result: the convolution result
 //	N: dimensions of the matrices
 __global__ void convolution_2d(int color, int rows, int cols, int kRows, int kCols, int ***matrix, int ***kernel, int ***result){
-	kCenterX = kCols / 2;
-  kCenterY = kRows / 2;
+ int kCenterX = kCols / 2;
+ int kCenterY = kRows / 2;
 	
   for(int c = 0; c < color;c++){
-    for(i=0; i < rows; ++i) {// rows
-      for(j=0; j < cols; ++j){// columns
-        for(m=0; m < kRows; ++m) {// row index of flipped kernel
+    for(int i=0; i < rows; ++i) {// rows
+      for(int j=0; j < cols; ++j){// columns
+        for(int m=0; m < kRows; ++m) {// row index of flipped kernel
           int mm = kRows - 1 - m; // row index of flipped kernel
-          for(n=0; n < kCols; ++n){// kernel columns
+          for(int n=0; n < kCols; ++n){// kernel columns
              int nn = kCols - 1 - n;  // column index of flipped kernel
              // index of input signal, used for checking boundary
              int ii = i + (kCenterY - mm);
@@ -52,16 +52,16 @@ void init_matirx(int ***m, int N, int C){
 void verify_result(int color, int rows, int cols, int kRows, int kCols, int ***matrix, int ***kernel, int ***result){
 	int temp;
 	int check_sum = 0;
-	kCenterX = kCols / 2;
-  kCenterY = kRows / 2;
+	int kCenterX = kCols / 2;
+  	int kCenterY = kRows / 2;
 	
   for(int c = 0; c < color;c++){
-    for(i=0; i < rows; ++i) {// rows
-      for(j=0; j < cols; ++j){// columns
+    for(int i=0; i < rows; ++i) {// rows
+      for(int j=0; j < cols; ++j){// columns
         temp = 0;
-        for(m=0; m < kRows; ++m) {// row index of flipped kernel
+        for(int m=0; m < kRows; ++m) {// row index of flipped kernel
           int mm = kRows - 1 - m; // row index of flipped kernel
-          for(n=0; n < kCols; ++n){// kernel columns
+          for(int n=0; n < kCols; ++n){// kernel columns
              int nn = kCols - 1 - n;  // column index of flipped kernel
              // index of input signal, used for checking boundary
              int ii = i + (kCenterY - mm);
@@ -76,7 +76,7 @@ void verify_result(int color, int rows, int cols, int kRows, int kCols, int ***m
       }
     }             
 	
-	std::cout << "The check sum is "<< check_sum;
+    std::cout << "The check sum is "<< check_sum;
 }
 
 int main(){
