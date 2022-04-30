@@ -27,7 +27,7 @@ __global__ void convolution_2d(int *matrix, int *result, int N){
 		for(int j = 0;j < MASK_DIM; j++){
 			if(start_r + i >= 0 && start_r + i < N){
 				if(start_c + j >= 0 && start_c + j < N){
-					temp = matrix[(start_r + i) * N + (start_c + j)] * mask[i * MASK_DIM + j];
+					temp += matrix[(start_r + i) * N + (start_c + j)] * mask[i * MASK_DIM + j];
 				}
 			}
 		}
@@ -60,7 +60,7 @@ void verify_result(int *m, int *mask, int *result, int N){
 			for(int k = 0;k < MASK_DIM;k++){
 				offset_r = i - MASK_OFFSET + k;
 				for(int l = 0;l < MASK_DIM;l++){
-					offset_c = j - MASK_OFFSET + k;
+					offset_c = j - MASK_OFFSET + l;
 
 					if(offset_r >= 0 && offset_r < N){
 						if(offset_c >= 0 && offset_c < N){
@@ -101,7 +101,7 @@ int main(){
 	cudaMemcpy(d_matrix, matrix, bytes_n, cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbol(mask, h_mask, bytes_m);
 
-	int THREADS = 16;
+	int THREADS = 32;
 	int BLOCKS = (N + THREADS - 1) / THREADS;
 
 	dim3 block_dim(THREADS, THREADS);
