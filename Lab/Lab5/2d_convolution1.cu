@@ -2,37 +2,35 @@
 #include<cstdlib>
 #include<iostream>
 
-// 3 x 3 convolutional mask
+// 3 x 3 x 3 convolutional mask
 #define MASK_DIM 3
 
 #define MASK_OFFSET (MASK_DIM / 2)
 
-__constant__ int mask[3 * 3];
+__constant__ int mask[3 * 3 * 3];
 
 //2d convolution
 //takes:
 //	matrix: input matrix
 //	result: the convolution result
 //	N: dimensions of the matrices
-__global__ void convolution_2d(int **matrix, int **result, int N, int C){
-		
+__global__ void convolution_2d(int *matrix, int *result, int N, int C){
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	int start_r = row - MASK_OFFSET;
+	int start_c = col - MASK_OFFSET;
 	for(int c = 0;c < C;c++){
-		int temp = 0;
-		int row = blockIdx.y * blockDim.y + threadIdx.y;
-		int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-		int start_r = row - MASK_OFFSET;
-		int start_c = col - MASK_OFFSET;
+		int temp = 0;		
 		for(int i = 0;i < MASK_DIM;i++){
 			for(int j = 0;j < MASK_DIM; j++){
 				if(start_r + i >= 0 && start_r + i < N){
 					if(start_c + j >= 0 && start_c + j < N){
-						temp += matrix[(start_r + i) * N + (start_c + j)] * mask[i * MASK_DIM + j];
+						temp += matrix[c * N * N + (start_r + i) * N + (start_c + j)] * mask[c * MASK_DIM * MASK_DIM + i * MASK_DIM + j];
 					}
 				}
 			}
 		}
-		result[c][row * N + col] = temp;
+		result[c * N * N + row * N + col] = temp;
 	}
 	
 	
@@ -41,18 +39,18 @@ __global__ void convolution_2d(int **matrix, int **result, int N, int C){
 //init the n x n matrix
 //m: pointer to the matrix
 //n: dimension of the matrix
-void init_matirx(int **m, int n, int c){
+void init_matirx(int *m, int n, int c){
 	for(int k = 0;k < c;k++){
 		for(int i = 0;i < n;i++){
 			for(int j = 0;j < n; j++){
-				m[k][n * i + j] = rand() % 100;
+				m[c * n * n + n * i + j] = rand() % 100;
 			}
 		}
 	}
 	
 }
 
-void verify_result(int **m, int **mask, int **result, int N, int C){
+void verify_result(int *m, int *mask, int *result, int N, int C){
 	int temp;
 	int check_sum = 0;
 	
@@ -70,13 +68,13 @@ void verify_result(int **m, int **mask, int **result, int N, int C){
 
 						if(offset_r >= 0 && offset_r < N){
 							if(offset_c >= 0 && offset_c < N){
-								temp += m[offset_r * N + offset_c] * mask[k * MASK_DIM + l];
+								temp += m[c * N * N + offset_r * N + offset_c] * mask[c * MASK_DIM * MASK_DIM + k * MASK_DIM + l];
 							}
 						}
 					}
 
 				}
-				check_sum += result[i * N + j] - temp;
+				check_sum += result[c * N * N + i * N + j] - temp;
 			}
 		
 		}
@@ -90,19 +88,19 @@ int main(){
 	int C = 3;
 	size_t bytes_n = N * N * C * sizeof(int);
 
-	int **matrix = new int[3][N * N];
-	int **result = new int[3][N * N];
+	int *matrix = new int[N * N * C];
+	int *result = new int[N * N * C];
 
 	//init the matrix
 	init_matirx(matrix, N, C);
 
 	size_t bytes_m = MASK_DIM * MASK_DIM * C * sizeof(int);
 
-	int **h_mask = new int[C][MASK_DIM * MASK_DIM];
-	init_matirx(h_mask, MASK_DIM);
+	int **h_mask = new int[MASK_DIM * MASK_DIM];
+	init_matirx(h_mask, MASK_DIM, C);
 
-	int **d_matrix;
-	int **d_result;
+	int *d_matrix;
+	int *d_result;
 
 	cudaMalloc(&d_matrix, bytes_n);
 	cudaMalloc(&d_result, bytes_n);
